@@ -6,18 +6,39 @@ import (
 	"time"
 )
 
+type Reader interface {
+	Read(rc chan string)
+}
+
+type Writer interface {
+	Write(wc chan string)
+}
+
 type LogProcess struct {
 	rc chan string
 	wc chan string
 
-	path        string // file path
+	read  Reader
+	write Writer
+}
+
+type ReadFromFile struct {
+	path string // file path
+}
+
+type WriteToInfluxDB struct {
 	influxDBDsn string // influx data source
 }
 
-func (l *LogProcess) ReadFromFile() {
+func (w *WriteToInfluxDB) Write(wc chan string) {
+	// module to write
+	fmt.Println(<-wc)
+}
+
+func (r *ReadFromFile) Read(rc chan string) {
 	// to read the module
 	line := "message"
-	l.rc <- line
+	rc <- line
 }
 
 func (l *LogProcess) Process() {
@@ -26,22 +47,25 @@ func (l *LogProcess) Process() {
 	l.wc <- strings.ToUpper(data)
 }
 
-func (l *LogProcess) WriteToInfluxDB() {
-	// to write the module
-	fmt.Println(<-l.wc)
-}
-
 func main() {
-	lp := &LogProcess{
-		rc:          make(chan string),
-		wc:          make(chan string),
-		path:        "/tmp/access.log",
+	r := &ReadFromFile{
+		path: "/tmp/access.log",
+	}
+
+	w := &WriteToInfluxDB{
 		influxDBDsn: "username&password...",
 	}
 
-	go lp.ReadFromFile()
+	lp := &LogProcess{
+		rc:    make(chan string),
+		wc:    make(chan string),
+		read:  r,
+		write: w,
+	}
+
+	go lp.read.Read(lp.rc)
 	go lp.Process()
-	go lp.WriteToInfluxDB()
+	go lp.write.Write(lp.wc)
 
 	time.Sleep(1 * time.Second)
 }
